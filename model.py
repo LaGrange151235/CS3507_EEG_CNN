@@ -61,21 +61,27 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=5,
-                               out_channels=32,
+                               out_channels=5,
                                kernel_size=3,
                                stride=1,
                                padding=1,
                                padding_mode='zeros')
-        self.conv2 = nn.Conv2d(in_channels=32, 
-                               out_channels=64, 
+        self.conv2 = nn.Conv2d(in_channels=5, 
+                               out_channels=5, 
+                               kernel_size=3, 
+                               stride=1, 
+                               padding=1, 
+                               padding_mode='zeros')
+        self.conv3 = nn.Conv2d(in_channels=5, 
+                               out_channels=5, 
                                kernel_size=3, 
                                stride=1, 
                                padding=1, 
                                padding_mode='zeros')
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(1024, 128)
-        self.fc2 = nn.Linear(128, 4)
+        self.fc1 = nn.Linear(80, 64)
+        self.fc2 = nn.Linear(64, 4)
 
     def forward(self, x):
 #        print("input: ", x.shape)
@@ -85,6 +91,10 @@ class CNN(nn.Module):
 #        print("relu output: ", x.shape)
         x = self.conv2(x)
 #        print("conv2 output: ", x.shape)
+        x = F.relu(x)
+#        print("relu output: ", x.shape)
+        x = self.conv3(x)
+#        print("conv3 output: ", x.shape)
         x = F.relu(x)
 #        print("relu output: ", x.shape)
         x = F.max_pool2d(x, 2)
