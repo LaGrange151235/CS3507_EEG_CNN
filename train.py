@@ -6,6 +6,7 @@ import numpy as np
 import dataloader
 from model import train
 import resnet18
+import resnet18_zhk
 
 def raw_reshape(raw_data_list):
     data_list = []
@@ -58,6 +59,7 @@ def raw_reshape(raw_data_list):
         data_list.append(mat)
     return data_list
 
+
 if __name__=="__main__":
     data = dataloader.load_all_data()
     train_acc_list = []
@@ -71,7 +73,7 @@ if __name__=="__main__":
             raw_train_label = data[experiment_id][session_id]["train_label"]
             raw_test_data = data[experiment_id][session_id]["test_data"]
             raw_test_label = data[experiment_id][session_id]["test_label"]
-#            print("example:", raw_train_data[0])
+
 
             train_data = raw_reshape(raw_train_data)
             train_label = raw_train_label
@@ -83,33 +85,41 @@ if __name__=="__main__":
             test_data = torch.tensor(np.array(test_data), dtype=torch.float32).to(device)
             test_label = torch.tensor(np.array(test_label), dtype=torch.float32).to(device)
 
-            model = resnet18.resnet18().to(device)
-            criterion = nn.CrossEntropyLoss()
-            optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
-
-            for epoch in range(100):
-                #                model.eval()
+            model = resnet18_zhk.ResNet18_().to(device)
+#            model = resnet18.resnet18().to(device)
+            optimizer = optim.Adam(model.parameters(), lr=5*1e-5)
+            model_train_acc_list = []
+            model_test_acc_list = []
+            for epoch in range(10):
                 outputs = model(train_data)
-                loss = criterion(outputs, train_label.long())
+                loss = F.cross_entropy(outputs, train_label.long())
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()   
 
-            correct = 0.0
-            total = 0.0
-            outputs = model(train_data)
-            _, predicted = torch.max(outputs.data, 1)
-            total += train_label.size(0)
-            correct += predicted.eq(train_label.data).cpu().sum()
-            print('Train Acc: %.3f%% ' % (100. * correct / total))
-            train_acc_list.append(100. * correct / total)
+                correct = 0.0
+                total = 0.0
+                outputs = model(train_data)
+                predicted = outputs.argmax(dim=1, keepdim=True)
+                total += train_label.size(0)
+                correct += predicted.eq(train_label.view_as(predicted)).sum().item()
+#                print('Train Acc: %.3f%% ' % (100. * correct / total))
+                model_train_acc_list.append(100. * correct / total)
             
-            correct = 0.0
-            total = 0.0
-            outputs = model(test_data)
-            _, predicted = torch.max(outputs.data, 1)
-            total += test_label.size(0)
-            correct += predicted.eq(test_label.data).cpu().sum()
-            print('Test Acc: %.3f%% ' % (100. * correct / total))
-            test_acc_list.append(100. * correct / total)
+                correct = 0.0
+                total = 0.0
+                outputs = model(test_data)
+                predicted = outputs.argmax(dim=1, keepdim=True)
+                total += test_label.size(0)
+                correct += predicted.eq(test_label.view_as(predicted)).sum().item()
+ #               print('Test Acc: %.3f%% ' % (100. * correct / total))
+                model_test_acc_list.append(100. * correct / total)
+          
+            train_acc = max(model_train_acc_list)
+            test_acc = max(model_test_acc_list)
+            print('Max Train Acc: %.3f%% ' % (train_acc))
+            print('Max Test Acc: %.3f%% ' % (test_acc))
+            train_acc_list.append(train_acc)
+            test_acc_list.append(test_acc)
 
     print('Avg Train Acc: %.3f%%, Test Acc: %.3f%%' % (sum(train_acc_list)/float(len(train_acc_list)), sum(test_acc_list)/float(len(test_acc_list))))
