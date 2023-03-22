@@ -151,8 +151,8 @@ for experiment_id in range(len(data)):
                
         train_acc = max(model_train_acc)
         test_acc = max(model_test_acc)
-        #train_acc = test(model, train_data_gpu, train_label_gpu)
-        #test_acc = test(model, test_data_gpu, test_label_gpu)
+        # train_acc = test(model, train_data_gpu, train_label_gpu)
+        # test_acc = test(model, test_data_gpu, test_label_gpu)
         logging("Train_acc: %.4f, Test_acc: %.4f" % (train_acc, test_acc))
         train_acc_list.append(train_acc)
         test_acc_list.append(test_acc)
