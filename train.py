@@ -1,12 +1,41 @@
 import torch
+import torch.backends.cudnn as backends_cudnn
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
+import torch.utils.data as torch_data
+
+from ResNet18 import *
+import dataloader as my_dataloader
 import numpy as np
-import dataloader
-from model import train
-import resnet18
-import resnet18_zhk
+import random
+
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    backends_cudnn.deterministic = True
+
+def logging(string):
+    print(string)
+    with open("./record.txt", "a+", encoding="utf-8") as f:
+        f.write(string+"\n")
+
+def get_data(data):
+    return data["train_data"], data["train_label"], data["test_data"], data["test_label"]
+
+def test(model, test_data_list, test_label_list):
+    model.eval()
+    correct = 0
+    with torch.no_grad(): 
+        data = test_data_list
+        label = test_label_list
+        outputs = model(data)
+        _, pred = torch.max(outputs.data, 1)
+        correct = (pred == label).sum().item()
+        acc = correct / float(len(label))
+    return acc
+
 
 def raw_reshape(raw_data_list):
     data_list = []
@@ -59,67 +88,75 @@ def raw_reshape(raw_data_list):
         data_list.append(mat)
     return data_list
 
+# Define training hyperparameters
+learning_rate = 5*1e-6
+num_epochs = 10
+batch_size = 32
+setup_seed(0)
 
-if __name__=="__main__":
-    data = dataloader.load_all_data()
-    train_acc_list = []
-    test_acc_list = []
-    device = torch.device("cuda")
-    for experiment_id in range(len(data)):
-        for session_id in range(len(data[experiment_id])):
-            print("================================================================")
-            print("experiment_id: %d, session_id: %d" %(experiment_id, session_id))
-            raw_train_data = data[experiment_id][session_id]["train_data"]
-            raw_train_label = data[experiment_id][session_id]["train_label"]
-            raw_test_data = data[experiment_id][session_id]["test_data"]
-            raw_test_label = data[experiment_id][session_id]["test_label"]
+# Load data
+data = my_dataloader.load_all_data()
 
+# Define model, loss function, and optimizer
+device = torch.device("cuda")
+model = ResNet18(num_classes=4).to(device)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-            train_data = raw_reshape(raw_train_data)
-            train_label = raw_train_label
-            test_data = raw_reshape(raw_test_data)
-            test_label = raw_test_label
+# Train model
+train_acc_list = []
+test_acc_list = []
+for experiment_id in range(len(data)):
+    for session_id in range(len(data[experiment_id])):
+        logging("Experiment_id: %d, Session_id: %d" %(experiment_id, session_id))
+        raw_train_data, raw_train_label, raw_test_data, raw_test_label = get_data(data[experiment_id][session_id])
+        train_data = raw_reshape(raw_train_data)
+        train_label = raw_train_label
+        test_data = raw_reshape(raw_test_data)
+        test_label = raw_test_label
 
-            train_data = torch.tensor(np.array(train_data), dtype=torch.float32).to(device)
-            train_label = torch.tensor(np.array(train_label), dtype=torch.float32).to(device)
-            test_data = torch.tensor(np.array(test_data), dtype=torch.float32).to(device)
-            test_label = torch.tensor(np.array(test_label), dtype=torch.float32).to(device)
+        train_data_gpu = torch.tensor(np.array(train_data), dtype=torch.float32).to(device)
+        train_label_gpu = torch.tensor(np.array(train_label), dtype=torch.float32).to(device)
+        test_data_gpu = torch.tensor(np.array(test_data), dtype=torch.float32).to(device)
+        test_label_gpu = torch.tensor(np.array(test_label), dtype=torch.float32).to(device)
 
-            model = resnet18_zhk.ResNet18_().to(device)
-#            model = resnet18.resnet18().to(device)
-            optimizer = optim.Adam(model.parameters(), lr=5*1e-5)
-            model_train_acc_list = []
-            model_test_acc_list = []
-            for epoch in range(10):
+        train_dataset = my_dataloader.my_dataset(train_data, train_label)
+        test_dataset = my_dataloader.my_dataset(test_data, test_label) 
+        train_dataloader = torch_data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+        test_dataloader = torch_data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+
+        model_train_acc = []
+        model_test_acc = []
+        for epoch in range(num_epochs):
+            for i, data_portion in enumerate(train_dataloader):
+                train_data, train_label = data_portion
+                train_data = train_data.float().to(device)
+                train_label = train_label.float().to(device)
+                model.train()
+                # Forward pass
                 outputs = model(train_data)
-                loss = F.cross_entropy(outputs, train_label.long())
+                loss = criterion(outputs, train_label.long())
+                # Backward and optimize
                 optimizer.zero_grad()
                 loss.backward()
-                optimizer.step()   
+                optimizer.step()
+            outputs = model(train_data_gpu)
+            loss = criterion(outputs, train_label_gpu.long())
+            train_acc = test(model, train_data_gpu, train_label_gpu)
+            test_acc = test(model, test_data_gpu, test_label_gpu)
+            model_train_acc.append(train_acc)
+            model_test_acc.append(test_acc)
+            if epoch % (num_epochs/10) == 0:
+                logging('Epoch [%d/%d], Loss: %.4f, Train_acc: %.4f, Test_acc: %.4f' % (epoch, num_epochs, loss.item(), train_acc, test_acc))
+               
+        train_acc = max(model_train_acc)
+        test_acc = max(model_test_acc)
+        #train_acc = test(model, train_data_gpu, train_label_gpu)
+        #test_acc = test(model, test_data_gpu, test_label_gpu)
+        logging("Train_acc: %.4f, Test_acc: %.4f" % (train_acc, test_acc))
+        train_acc_list.append(train_acc)
+        test_acc_list.append(test_acc)
 
-                correct = 0.0
-                total = 0.0
-                outputs = model(train_data)
-                predicted = outputs.argmax(dim=1, keepdim=True)
-                total += train_label.size(0)
-                correct += predicted.eq(train_label.view_as(predicted)).sum().item()
-#                print('Train Acc: %.3f%% ' % (100. * correct / total))
-                model_train_acc_list.append(100. * correct / total)
-            
-                correct = 0.0
-                total = 0.0
-                outputs = model(test_data)
-                predicted = outputs.argmax(dim=1, keepdim=True)
-                total += test_label.size(0)
-                correct += predicted.eq(test_label.view_as(predicted)).sum().item()
- #               print('Test Acc: %.3f%% ' % (100. * correct / total))
-                model_test_acc_list.append(100. * correct / total)
-          
-            train_acc = max(model_train_acc_list)
-            test_acc = max(model_test_acc_list)
-            print('Max Train Acc: %.3f%% ' % (train_acc))
-            print('Max Test Acc: %.3f%% ' % (test_acc))
-            train_acc_list.append(train_acc)
-            test_acc_list.append(test_acc)
-
-    print('Avg Train Acc: %.3f%%, Test Acc: %.3f%%' % (sum(train_acc_list)/float(len(train_acc_list)), sum(test_acc_list)/float(len(test_acc_list))))
+    avg_train_acc = sum(train_acc_list)/len(train_acc_list)
+    avg_test_acc = sum(test_acc_list)/len(test_acc_list)
+    logging("Avg_train_acc: %.4f, Avg_test_acc: %.4f" % (avg_train_acc, avg_test_acc))

@@ -1,7 +1,19 @@
+import torch.utils.data as Data
 import numpy as np
 import os
 
 data_path = "./SEED-IV/SEED-IV"
+
+class my_dataset(Data.Dataset):
+    def __init__(self, data_root, data_label):
+        self.data = data_root
+        self.label = data_label
+    def __getitem__(self, index):
+        data = self.data[index]
+        label = self.label[index]
+        return data, label
+    def __len__(self):
+        return len(self.data)
 
 def load_all_data():
     data_list = []
