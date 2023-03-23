@@ -36,58 +36,92 @@ def test(model, test_data_list, test_label_list):
         acc = correct / float(len(label))
     return acc
 
-def dependent_train(batch_size, num_epochs, data, device, model, criterion, optimizer):
+def independent_train(batch_size, num_epochs, data, device, model, criterion, optimizer):
     # Train model
     train_acc_list = []
     test_acc_list = []
+
+    test_data_lists = []
+    test_label_lists = []
+    train_data_lists = []
+    train_label_lists = []
+    for test_session_id in range(len(data[0])):
+        test_data_list = []
+        test_label_list = []
+        train_data_list = []
+        train_label_list = []
+        for experiment_id in range(len(data)):
+            raw_train_data, raw_train_label, raw_test_data, raw_test_label = my_dataloader.get_data(data[experiment_id][test_session_id])
+            test_data_list.append(raw_test_data)
+            test_label_list.append(raw_test_label)
+            for session_id in range(len(data[experiment_id])):
+                if session_id == experiment_id:
+                    continue
+                else:
+                    raw_train_data, raw_train_label, raw_test_data, raw_test_label = my_dataloader.get_data(data[experiment_id][session_id])
+                    train_data_list.append(raw_train_data)
+                    train_label_list.append(raw_train_label)
+
+        test_data_list = np.concatenate(test_data_list)
+        test_label_list = np.concatenate(test_label_list)
+        test_data_lists.append(test_data_list)
+        test_label_lists.append(test_label_list)
+
+        train_data_list = np.concatenate(train_data_list)
+        train_label_list = np.concatenate(train_label_list)
+        train_data_lists.append(train_data_list)
+        train_label_lists.append(train_label_list)
+    
     start_time = time.time()
     print("Start_time: %.4f, Args: %s" % (start_time, args))
-    for experiment_id in range(len(data)):
-        for session_id in range(len(data[experiment_id])):
-            logging("Experiment_id: %d, Session_id: %d" %(experiment_id, session_id))
-            raw_train_data, raw_train_label, raw_test_data, raw_test_label = my_dataloader.get_data(data[experiment_id][session_id])
-            train_data = my_dataloader.raw_reshape(raw_train_data)
-            train_label = raw_train_label
-            test_data = my_dataloader.raw_reshape(raw_test_data)
-            test_label = raw_test_label
+    for session_id in range(len(data[0])):
+        logging("Test_session_id: %d" %(session_id))
+        raw_train_data = train_data_lists[session_id]
+        raw_train_label = train_label_lists[session_id]
+        raw_test_data = test_data_lists[session_id]
+        raw_test_label = test_label_lists[session_id]
+        train_data = my_dataloader.raw_reshape(raw_train_data)
+        train_label = raw_train_label
+        test_data = my_dataloader.raw_reshape(raw_test_data)
+        test_label = raw_test_label
+     
+        train_data_gpu = torch.tensor(np.array(train_data), dtype=torch.float32).to(device)
+        train_label_gpu = torch.tensor(np.array(train_label), dtype=torch.float32).to(device)
+        test_data_gpu = torch.tensor(np.array(test_data), dtype=torch.float32).to(device)
+        test_label_gpu = torch.tensor(np.array(test_label), dtype=torch.float32).to(device)
+
+        train_dataset = my_dataloader.my_dataset(train_data, train_label)
+        train_dataloader = torch_data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     
-            train_data_gpu = torch.tensor(np.array(train_data), dtype=torch.float32).to(device)
-            train_label_gpu = torch.tensor(np.array(train_label), dtype=torch.float32).to(device)
-            test_data_gpu = torch.tensor(np.array(test_data), dtype=torch.float32).to(device)
-            test_label_gpu = torch.tensor(np.array(test_label), dtype=torch.float32).to(device)
-    
-            train_dataset = my_dataloader.my_dataset(train_data, train_label)
-            train_dataloader = torch_data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    
-            model_train_acc = []
-            model_test_acc = []
-            for epoch in range(num_epochs):
-                for i, data_portion in enumerate(train_dataloader):
-                    train_data, train_label = data_portion
-                    train_data = train_data.float().to(device)
-                    train_label = train_label.float().to(device)
-                    model.train()
-                    # Forward pass
-                    outputs = model(train_data)
-                    loss = criterion(outputs, train_label.long())
-                    # Backward and optimize
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-                outputs = model(train_data_gpu)
-                loss = criterion(outputs, train_label_gpu.long())
-                train_acc = test(model, train_data_gpu, train_label_gpu)
-                test_acc = test(model, test_data_gpu, test_label_gpu)
-                model_train_acc.append(train_acc)
-                model_test_acc.append(test_acc)
-                if epoch % (num_epochs/10) == 0:
-                    logging('Epoch [%d/%d], Loss: %.4f, Train_acc: %.4f, Test_acc: %.4f' % (epoch, num_epochs, loss.item(), train_acc, test_acc))
-                   
-            train_acc = max(model_train_acc)
-            test_acc = max(model_test_acc)
-            logging("Experiment_id: %d, Session_id: %d, Train_acc: %.4f, Test_acc: %.4f" % (experiment_id, session_id, train_acc, test_acc))
-            train_acc_list.append(train_acc)
-            test_acc_list.append(test_acc)
+        model_train_acc = []
+        model_test_acc = []
+        for epoch in range(num_epochs):
+            for i, data_portion in enumerate(train_dataloader):
+                train_data, train_label = data_portion
+                train_data = train_data.float().to(device)
+                train_label = train_label.float().to(device)
+                model.train()
+                # Forward pass
+                outputs = model(train_data)
+                loss = criterion(outputs, train_label.long())
+                # Backward and optimize
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            outputs = model(train_data_gpu)
+            loss = criterion(outputs, train_label_gpu.long())
+            train_acc = test(model, train_data_gpu, train_label_gpu)
+            test_acc = test(model, test_data_gpu, test_label_gpu)
+            model_train_acc.append(train_acc)
+            model_test_acc.append(test_acc)
+            if epoch % (num_epochs/10) == 0:
+                logging('Epoch [%d/%d], Loss: %.4f, Train_acc: %.4f, Test_acc: %.4f' % (epoch, num_epochs, loss.item(), train_acc, test_acc))
+
+        train_acc = max(model_train_acc)
+        test_acc = max(model_test_acc)
+        logging("Test_session_id: %d, Train_acc: %.4f, Test_acc: %.4f" % (session_id, train_acc, test_acc))
+        train_acc_list.append(train_acc)
+        test_acc_list.append(test_acc)
 
     end_time = time.time()    
     avg_train_acc = sum(train_acc_list)/len(train_acc_list)
@@ -95,7 +129,7 @@ def dependent_train(batch_size, num_epochs, data, device, model, criterion, opti
     logging("Avg_train_acc: %.4f, Avg_test_acc: %.4f" % (avg_train_acc, avg_test_acc))
     logging("Total_training_time: %.4f" % (end_time-start_time))
 
-def independent_train(batch_size, num_epochs, data, device, model, criterion, optimizer):
+def dependent_train(batch_size, num_epochs, data, device, model, criterion, optimizer):
     # Train model
     train_acc_list = []
     test_acc_list = []

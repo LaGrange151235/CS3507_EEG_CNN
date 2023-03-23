@@ -2,3 +2,7 @@ Experiment_id: 0, Session_id: 0
 Epoch [0/10], Loss: 0.2050, Train_acc: 0.4246, Test_acc: 0.0000
 Epoch [1/10], Loss: 0.0657, Train_acc: 0.8377, Test_acc: 0.2988
 Experiment_id: 0, Session_id: 0
+Experiment_id: 0, Session_id: 0
+Epoch [0/10], Loss: 0.0894, Train_acc: 0.4246, Test_acc: 0.0000
+Epoch [1/10], Loss: 0.0226, Train_acc: 0.8557, Test_acc: 0.5270
+Test_session_id: 0
