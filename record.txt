@@ -1,3 +1,4 @@
 Experiment_id: 0, Session_id: 0
 Epoch [0/10], Loss: 0.2050, Train_acc: 0.4246, Test_acc: 0.0000
 Epoch [1/10], Loss: 0.0657, Train_acc: 0.8377, Test_acc: 0.2988
+Experiment_id: 0, Session_id: 0

@@ -7,6 +7,7 @@ import torch.backends.cudnn as backends_cudnn
 import numpy as np
 import random
 import argparse
+import time
 
 from ResNet18 import *
 import dataloader as my_dataloader
@@ -114,6 +115,8 @@ if __name__=="__main__":
     # Train model
     train_acc_list = []
     test_acc_list = []
+    start_time = time.time()
+    print("Start_time: %.4f, Args: %s" % (start_time, args))
     for experiment_id in range(len(data)):
         for session_id in range(len(data[experiment_id])):
             logging("Experiment_id: %d, Session_id: %d" %(experiment_id, session_id))
@@ -162,7 +165,9 @@ if __name__=="__main__":
             logging("Experiment_id: %d, Session_id: %d, Train_acc: %.4f, Test_acc: %.4f" % (experiment_id, session_id, train_acc, test_acc))
             train_acc_list.append(train_acc)
             test_acc_list.append(test_acc)
-    
+
+        end_time = time.time()    
         avg_train_acc = sum(train_acc_list)/len(train_acc_list)
         avg_test_acc = sum(test_acc_list)/len(test_acc_list)
         logging("Avg_train_acc: %.4f, Avg_test_acc: %.4f" % (avg_train_acc, avg_test_acc))
+        logging("Total_training_time: %.4f" % (end_time-start_time))
